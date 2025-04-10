@@ -1,56 +1,122 @@
 import streamlit as st
 import pandas as pd
 
+def transform_to_brand_view(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Takes the raw DataFrame with 'Top Clicked Brand #1', 'Top Clicked Product #1: ...'
+    etc. and creates a brand-level DataFrame where each brand-keyword-product
+    combination is a single row.
+    """
+    rows = []
+
+    # Go row by row. Each row = a particular Search Term + up to 3 top-clicked brands/products.
+    for i, r in df.iterrows():
+        search_term = r["Search Term"]
+
+        # BRAND 1
+        brand1 = r["Top Clicked Brand #1"]
+        prod_asin1 = r["Top Clicked Product #1: ASIN"]
+        prod_title1 = r["Top Clicked Product #1: Product Title"]
+        click_share1 = r["Top Clicked Product #1: Click Share"]
+        conv_share1 = r["Top Clicked Product #1: Conversion Share"]
+        rows.append({
+            "Search Term": search_term,
+            "Brand": brand1,
+            "ASIN": prod_asin1,
+            "Product Title": prod_title1,
+            "Click Share": click_share1,
+            "Conversion Share": conv_share1
+        })
+
+        # BRAND 2
+        brand2 = r["Top Clicked Brands #2"]
+        prod_asin2 = r["Top Clicked Product #2: ASIN"]
+        prod_title2 = r["Top Clicked Product #2: Product Title"]
+        click_share2 = r["Top Clicked Product #2: Click Share"]
+        conv_share2 = r["Top Clicked Product #2: Conversion Share"]
+        rows.append({
+            "Search Term": search_term,
+            "Brand": brand2,
+            "ASIN": prod_asin2,
+            "Product Title": prod_title2,
+            "Click Share": click_share2,
+            "Conversion Share": conv_share2
+        })
+
+        # BRAND 3
+        brand3 = r["Top Clicked Brands #3"]
+        prod_asin3 = r["Top Clicked Product #3: ASIN"]
+        prod_title3 = r["Top Clicked Product #3: Product Title"]
+        click_share3 = r["Top Clicked Product #3: Click Share"]
+        conv_share3 = r["Top Clicked Product #3: Conversion Share"]
+        rows.append({
+            "Search Term": search_term,
+            "Brand": brand3,
+            "ASIN": prod_asin3,
+            "Product Title": prod_title3,
+            "Click Share": click_share3,
+            "Conversion Share": conv_share3
+        })
+
+    # Convert the list of dicts into a new DataFrame
+    brand_df = pd.DataFrame(rows)
+
+    # Clean up data types if needed
+    brand_df["Click Share"] = pd.to_numeric(brand_df["Click Share"], errors="coerce")
+    brand_df["Conversion Share"] = pd.to_numeric(brand_df["Conversion Share"], errors="coerce")
+
+    return brand_df
+
 def main():
-    st.title("Saw Palmetto Data Analysis")
+    st.title("Saw Palmetto Brand-Keyword Analysis")
 
-    # 1. File Upload
-    uploaded_file = st.file_uploader("Upload your CSV file", type=["csv", "xlsx"])
-    if uploaded_file is not None:
-        # 2. Read the file
+    uploaded_file = st.file_uploader("Upload your CSV or Excel file", type=["csv", "xlsx"])
+    if uploaded_file:
+        # Read the file
         if uploaded_file.name.endswith(".csv"):
-            df = pd.read_csv(uploaded_file)
+            # If your CSV has a “Reporting Range” line above the header:
+            df = pd.read_csv(uploaded_file, header=1, encoding="utf-8-sig")
         else:
+            # for XLSX
             df = pd.read_excel(uploaded_file)
-        
-        # 3. Show a preview
-        st.subheader("Data Preview")
-        st.dataframe(df.head(10))
 
-        # 4. Top-clicked product (#1) per search term
-        #    For each row, you have "Search Term" and "Top Clicked Product #1: Product Title".
-        st.subheader("Top Clicked Product #1 by Search Term")
-        for idx, row in df.iterrows():
-            st.write(f"**Search Term**: {row['Search Term']}")
-            st.write(f"- **Product Title**: {row['Top Clicked Product #1: Product Title']}")
-            st.write(f"- **Brand**: {row['Top Clicked Brand #1']}")
-            st.write(f"- **Click Share**: {row['Top Clicked Product #1: Click Share']}")
-            st.write("---")
+        # Clean up column names (remove quotes, trim whitespace)
+        df.columns = df.columns.str.replace('"', '', regex=False)
+        df.columns = df.columns.str.strip()
 
-        # 5. Find the single highest-clicked product (#1) across all rows
-        #    (the row with the maximum “Top Clicked Product #1: Click Share”)
-        df['Top Clicked Product #1: Click Share'] = pd.to_numeric(
-            df['Top Clicked Product #1: Click Share'], errors='coerce'
-        )
-        max_click_share_idx = df['Top Clicked Product #1: Click Share'].idxmax()
-        top_clicked = df.loc[max_click_share_idx]
+        st.subheader("Raw Data Preview")
+        st.dataframe(df.head())
 
-        st.subheader("Overall Highest-Clicked Product (#1) in the Dataset")
-        st.write(f"**Search Term**: {top_clicked['Search Term']}")
-        st.write(f"**Product Title**: {top_clicked['Top Clicked Product #1: Product Title']}")
-        st.write(f"**Brand**: {top_clicked['Top Clicked Brand #1']}")
-        st.write(f"**Click Share**: {top_clicked['Top Clicked Product #1: Click Share']}")
+        # Transform the data to brand-level
+        brand_df = transform_to_brand_view(df)
 
-        # 6. Optional: Show keywords associated with that top product
-        #    We’ll look for all rows containing the same Product ASIN or Title
-        st.subheader("Keywords Associated with this Top-Clicked Product")
-        top_clicked_asin = top_clicked['Top Clicked Product #1: ASIN']
-        # Filter to see if the same ASIN appears in other search terms
-        associated_keywords = df[df['Top Clicked Product #1: ASIN'] == top_clicked_asin]['Search Term'].unique()
-        st.write(", ".join(associated_keywords))
+        st.subheader("Brand-Level Data")
+        st.dataframe(brand_df.head(10))
+
+        # Group by brand to list all keywords driving their sales
+        # We'll just display them by brand. You can do advanced stats (sum or avg).
+        unique_brands = brand_df["Brand"].dropna().unique()
+
+        for brand in unique_brands:
+            st.markdown(f"## Brand: **{brand}**")
+
+            # Filter brand-specific data
+            brand_data = brand_df[brand_df["Brand"] == brand]
+
+            # Sort by click share descending if you want
+            brand_data_sorted = brand_data.sort_values(by="Click Share", ascending=False)
+
+            # Display top N or everything
+            st.write(brand_data_sorted[[
+                "Search Term",
+                "ASIN",
+                "Product Title",
+                "Click Share",
+                "Conversion Share"
+            ]])
 
     else:
-        st.info("Please upload your CSV/Excel file to analyze.")
+        st.info("Please upload your CSV/Excel file to continue.")
 
 if __name__ == "__main__":
     main()
